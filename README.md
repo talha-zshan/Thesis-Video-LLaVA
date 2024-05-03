@@ -16,6 +16,7 @@ conda activate <environment_name>
 ## 🛠️ Autogen And Kafka Requirements and Installation
 In the virtual environment, use the following pip command to install the necessary packages
 ```bash
+pip install --upgrade pip
 pip install pyautogen
 pip install confluent-kafka
 ```
@@ -23,11 +24,8 @@ pip install confluent-kafka
 * Python >= 3.10
 * Pytorch == 2.0.1
 * CUDA Version >= 11.7
-* Install required packages:
+* Install required packages from the root directory:
 ```bash
-git clone https://github.com/PKU-YuanGroup/Video-LLaVA
-cd Video-LLaVA
-pip install --upgrade pip  # enable PEP 660 support
 pip install -e .
 pip install -e ".[train]"
 pip install flash-attn --no-build-isolation

@@ -98,5 +98,7 @@ kafka_config = {'bootstrap.servers': 'localhost:9092'}
 kafka_manager = KafkaManager(kafka_config)
 # kafka_manager.create_topic(all_topics, 3, 1)
 kafka_manager.produce_message('camera-1', 'demo_videos/talking_dog.mp4')
+kafka_manager.produce_message('camera-1', 'demo_videos/talking_dog.mp4')
+kafka_manager.produce_message('camera-1', 'demo_videos/talking_dog.mp4')
 
-kafka_manager.consume_messages('camera-1')
+# kafka_manager.consume_messages('camera-1')

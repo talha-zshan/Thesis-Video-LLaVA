@@ -33,19 +33,23 @@ work_dir = Path("coding")
 work_dir.mkdir(exist_ok=True)
 
 
-### ======================================== VIDEO FRAME FUNCTIONS =========================================================================
+### ======================================== AUTOGEN AGENTS =========================================================================
 
-coder_agent = AssistantAgent(
-    name="coderbot",
-    system_message="For coding tasks, only use the functions you have been provided with. The functions are written in python. You have a frame_extractor and a video_creator, these tools should be used sequentially with frame_extractor used first. Reply TERMINATE when the task is done.",
+Decider_Agent = AssistantAgent(
+    name="Decider",
+    human_input_mode="NEVER",
+    max_consecutive_auto_reply=100,
+    code_execution_config=False,
     llm_config=llm_config,
+    system_message="""You act on behalf of the Admin and talk to the Engineer. You decide which code tasks the Engineer should execute depending on the Admins requirement.
+    You have the ability to tell the Engineer which function to execute.""",
 )
 
 engineer = autogen.AssistantAgent(
     name="Engineer",
     llm_config=llm_config,
     system_message="""
-    I'm Engineer. I'm expert in python programming. I'm executing code tasks required by Admin.
+    I'm Engineer. I'm expert in python programming. I'm executing code tasks required by the Decider.
     """,
 )
 
@@ -55,7 +59,7 @@ user_proxy = UserProxyAgent(
     system_message="A proxy for the user for executing code.",
     is_termination_msg=lambda x: x.get("content", "") and x.get("content", "").rstrip().endswith("TERMINATE"),
     human_input_mode="ALWAYS",
-    max_consecutive_auto_reply=15,
+    max_consecutive_auto_reply=100,
     code_execution_config=False,
 )
 
@@ -74,7 +78,7 @@ def kafka_consume(topic: Annotated[str, "The path to the directory where multipl
 @engineer.register_for_llm(description="Extract frames from a video whose title is provided by the user. The video path is taken from the output of kafka_consume function")
 def extract_video_frames(
     video_path: Annotated[str, "The path to the directory where the video is stored. The default directory is demo_videos/. Add the title of the video by the user to the default directory to get the full path."], 
-    dir_path: Annotated[str, "The path to the directory where multiple videos are stored. Use default value as None"], 
+    dir_path: Annotated[str, "None"], 
     sampling: Annotated[int, "The sampling rate to be used. Use default value as 2"], 
     output_root: Annotated[str, "The path to the directory where the output is stored. The default directory to use is extracted_frames/"], 
     workers=Annotated[int, "The number of workers to be used. Use default value as None"]
@@ -184,55 +188,52 @@ def call_video_llava(
     user_input: Annotated[str, "The prompt sent by the user"]
     ):
     disable_torch_init()
+    video = video_path
+    inp = user_input
     model_path = 'LanguageBind/Video-LLaVA-7B'
     cache_dir = 'cache_dir'
     device = 'cuda'
     load_4bit, load_8bit = True, False
     model_name = get_model_name_from_path(model_path)
-    tokenizer, model, processor, _ = load_pretrained_model(
-        model_path, None, model_name, load_8bit, load_4bit, device=device, cache_dir=cache_dir)
+    tokenizer, model, processor, _ = load_pretrained_model(model_path, None, model_name, load_8bit, load_4bit, device=device, cache_dir=cache_dir)
     video_processor = processor['video']
     conv_mode = "llava_v1"
     conv = conv_templates[conv_mode].copy()
     roles = conv.roles
-    
-    while True:
-        video = video_path
-        inp = input("Enter your prompt (type 'exit' to quit): ")
-        if inp.lower() == 'exit':
-            break
-        
-        video_tensor = video_processor(video, return_tensors='pt')['pixel_values']
-        if isinstance(video_tensor, list):
-            tensor = [video.to(model.device, dtype=torch.float16) for video in video_tensor]
-        else:
-            tensor = video_tensor.to(model.device, dtype=torch.float16)
-        
-        inp = ' '.join([DEFAULT_IMAGE_TOKEN] * model.get_video_tower().config.num_frames) + '\n' + inp
-        conv.append_message(conv.roles[0], inp)
-        conv.append_message(conv.roles[1], None)
-        prompt = conv.get_prompt()
-        input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
-        stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
-        keywords = [stop_str]
-        stopping_criteria = KeywordsStoppingCriteria(keywords, tokenizer, input_ids)
 
-        with torch.inference_mode():
-            output_ids = model.generate(
-                input_ids,
-                images=tensor,
-                do_sample=True,
-                temperature=0.1,
-                max_new_tokens=1024,
-                use_cache=True,
-                stopping_criteria=[stopping_criteria])
-        outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()
-        print(outputs)
-    return outputs
+    video_tensor = video_processor(video, return_tensors='pt')['pixel_values']
+    if type(video_tensor) is list:
+        tensor = [video.to(model.device, dtype=torch.float16) for video in video_tensor]
+    else:
+        tensor = video_tensor.to(model.device, dtype=torch.float16)
+
+    print(f"{roles[1]}: {inp}")
+    inp = ' '.join([DEFAULT_IMAGE_TOKEN] * model.get_video_tower().config.num_frames) + '\n' + inp
+    conv.append_message(conv.roles[0], inp)
+    conv.append_message(conv.roles[1], None)
+    prompt = conv.get_prompt()
+    input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
+    stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
+    keywords = [stop_str]
+    stopping_criteria = KeywordsStoppingCriteria(keywords, tokenizer, input_ids)
+
+    with torch.inference_mode():
+        output_ids = model.generate(
+            input_ids,
+            images=tensor,
+            do_sample=True,
+            temperature=0.1,
+            max_new_tokens=1024,
+            use_cache=True,
+            stopping_criteria=[stopping_criteria])
+
+    outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()
+    print(outputs)
 
 
+### ======================================== AUTOGEN GROUP-CHAT INITIALIZATION =========================================================================
 groupchat = autogen.GroupChat(
-    agents=[engineer, user_proxy],
+    agents=[Decider_Agent, engineer, user_proxy],
     messages=[],
     max_round=500,
     speaker_selection_method="round_robin",

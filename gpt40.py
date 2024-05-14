@@ -44,16 +44,16 @@ latency = end - start
 print(result.choices[0].message.content)
 print(f"Latency: {latency}")
 
-# Assuming base64Frames is your list of base64 encoded frames
-for b64_frame in base64Frames[0::5]:
-    # Decode the base64 frame
-    img_bytes = base64.b64decode(b64_frame)
-    # Convert bytes to numpy array
-    img_arr = np.frombuffer(img_bytes, dtype=np.uint8)
-    # Decode numpy array into image
-    img = cv2.imdecode(img_arr, flags=cv2.IMREAD_COLOR)
-    # Convert color style from BGR to RGB
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    # Use plt to display the image
-    plt.imshow(img)
-    plt.show()
+
+# for b64_frame in base64Frames[0::5]:
+#     # Decode the base64 frame
+#     img_bytes = base64.b64decode(b64_frame)
+#     # Convert bytes to numpy array
+#     img_arr = np.frombuffer(img_bytes, dtype=np.uint8)
+#     # Decode numpy array into image
+#     img = cv2.imdecode(img_arr, flags=cv2.IMREAD_COLOR)
+#     # Convert color style from BGR to RGB
+#     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+#     # Use plt to display the image
+#     plt.imshow(img)
+#     plt.show()

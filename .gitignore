@@ -3,6 +3,7 @@ cache_dir/
 videollava/model/language_model/__pycache__/
 videollava/model/language_model/mpt/__pycache__/
 extracted_frames/*
+demo_videos/*
 new_videos/*
 
 # Byte-compiled / optimized / DLL files

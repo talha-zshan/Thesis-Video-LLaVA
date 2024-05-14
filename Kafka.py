@@ -96,9 +96,13 @@ class KafkaManager:
 all_topics = ["camera-1", "camera-2", "camera-3", "camera-4"]
 kafka_config = {'bootstrap.servers': 'localhost:9092'}
 kafka_manager = KafkaManager(kafka_config)
-# kafka_manager.create_topic(all_topics, 3, 1)
-kafka_manager.produce_message('camera-1', 'demo_videos/talking_dog.mp4')
-kafka_manager.produce_message('camera-1', 'demo_videos/talking_dog.mp4')
-kafka_manager.produce_message('camera-1', 'demo_videos/talking_dog.mp4')
+kafka_manager.create_topic(all_topics, 3, 1)
+kafka_manager.produce_message('camera-1', 'demo_videos/Complex_Video.mp4')
+kafka_manager.produce_message('camera-1', 'demo_videos/Complex_Video.mp4')
+kafka_manager.produce_message('camera-1', 'demo_videos/Complex_Video.mp4')
+# kafka_manager.produce_message('camera-2', 'demo_videos/talking_dog.mp4')
+# kafka_manager.produce_message('camera-2', 'demo_videos/talking_dog.mp4')
+# kafka_manager.produce_message('camera-3', 'demo_videos/Basic_Video.mp4')
+# kafka_manager.produce_message('camera-3', 'demo_videos/Basic_Video.mp4')
 
 # kafka_manager.consume_messages('camera-1')

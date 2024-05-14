@@ -1,16 +1,15 @@
 import os
 import math
-import json
 import cv2
 import glob
 import autogen
 import asyncio
 import torch
+import time
 
 # Autogen Imports
-from autogen import UserProxyAgent, AssistantAgent
+from autogen import UserProxyAgent
 from pathlib import Path
-from autogen import UserProxyAgent, AssistantAgent
 from typing_extensions import Annotated
 from autogen.cache import Cache
 
@@ -35,15 +34,15 @@ work_dir.mkdir(exist_ok=True)
 
 ### ======================================== AUTOGEN AGENTS =========================================================================
 
-Decider_Agent = AssistantAgent(
-    name="Decider",
-    human_input_mode="NEVER",
-    max_consecutive_auto_reply=100,
-    code_execution_config=False,
-    llm_config=llm_config,
-    system_message="""You act on behalf of the Admin and talk to the Engineer. You decide which code tasks the Engineer should execute depending on the Admins requirement.
-    You have the ability to tell the Engineer which function to execute.""",
-)
+# Decider_Agent = AssistantAgent(
+#     name="Decider",
+#     human_input_mode="NEVER",
+#     max_consecutive_auto_reply=100,
+#     code_execution_config=False,
+#     llm_config=llm_config,
+#     system_message="""You act on behalf of the Admin and talk to the Engineer. You decide which code tasks the Engineer should execute depending on the Admins requirement.
+#     You have the ability to tell the Engineer which function to execute.""",
+# )
 
 engineer = autogen.AssistantAgent(
     name="Engineer",
@@ -58,7 +57,7 @@ user_proxy = UserProxyAgent(
     name="Admin",
     system_message="A proxy for the user for executing code.",
     is_termination_msg=lambda x: x.get("content", "") and x.get("content", "").rstrip().endswith("TERMINATE"),
-    human_input_mode="ALWAYS",
+    human_input_mode="NEVER",
     max_consecutive_auto_reply=100,
     code_execution_config=False,
 )
@@ -79,17 +78,20 @@ def kafka_consume(topic: Annotated[str, "The path to the directory where multipl
 def extract_video_frames(
     video_path: Annotated[str, "The path to the directory where the video is stored. The default directory is demo_videos/. Add the title of the video by the user to the default directory to get the full path."], 
     dir_path: Annotated[str, "None"], 
-    sampling: Annotated[int, "The sampling rate to be used. Use default value as 2"], 
+    sampling: Annotated[int, "The sampling rate to be used. Use default value as 1"], 
     output_root: Annotated[str, "The path to the directory where the output is stored. The default directory to use is extracted_frames/"], 
     workers=Annotated[int, "The number of workers to be used. Use default value as None"]
     ):
     import os.path as osp
     from multiprocessing import Pool
-    
+
+    # Timer Start
+    func_start = time.perf_counter()
+
     # Supported video and frame extensions
     supported_video_ext = ('.avi', '.mp4')
     supported_frame_ext = ('.jpg', '.png')
-    
+
     class FrameExtractor:
         def __init__(self, video_file, output_dir, frame_ext='.jpg', sampling=-1):
             if not osp.exists(video_file):
@@ -136,6 +138,11 @@ def extract_video_frames(
             raise ValueError("Not supported video file format: {}".format(video_ext))
         output_dir = osp.join(output_root, '{}_frames'.format(video_basename))
         process_video_file(video_path, output_dir, sampling)
+
+        # Timer end 
+        func_end = time.perf_counter()
+        func_latency = func_end - func_start
+        print(f"Latency For extract_video_frames: {func_latency:.6f} seconds")
         return output_dir
 
     if dir_path:
@@ -159,12 +166,20 @@ def create_video_from_frames(
     output_video_path: Annotated[str, "Add the title of the video by the user with extension set to .mp4 to get the full path"], 
     frame_rate=24.0
     ):
+
+    # Start Timer
+    func_start = time.perf_counter()
+
+
     # Get all the frame filenames in the directory
     frame_files = sorted(glob.glob(os.path.join(frames_path, '*.jpg')))
 
     # Read the first frame to determine the width and height
     frame = cv2.imread(frame_files[0])
-    height, width, layers = frame.shape
+    # height, width, layers = frame.shape
+    width=640
+    height=360
+    
 
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -173,12 +188,25 @@ def create_video_from_frames(
     # Loop through all the frames and add them to the video
     for frame_file in frame_files:
         frame = cv2.imread(frame_file)
-        video.write(frame)
+            
+        if frame is not None:
+            try:
+                resized_frame = cv2.resize(frame, (width, height))
+                video.write(resized_frame)
+            except Exception as e:
+                print(e)
+                return "TERMINATE"
 
     # Release the video writer
     video.release()
 
+    # End Timer
+    func_end = time.perf_counter()
+    func_latency = func_end - func_start
+    print(f"Latency For create_video_from_frames: {func_latency:.6f} seconds")
+
     return f"Success! Video Created & Stored in {output_video_path}"
+
 
 # Video-LLava Call Function
 @user_proxy.register_for_execution()
@@ -187,6 +215,10 @@ def call_video_llava(
     video_path: Annotated[str, "The path to the directory where the video is stored. Use the path returned by the create_video_from_frames function"], 
     user_input: Annotated[str, "The prompt sent by the user"]
     ):
+
+    # Function Start Time
+    func_start = time.perf_counter()
+    
     disable_torch_init()
     video = video_path
     inp = user_input
@@ -230,10 +262,18 @@ def call_video_llava(
     outputs = tokenizer.decode(output_ids[0, input_ids.shape[1]:]).strip()
     print(outputs)
 
+    # Function End Time
+    func_end = time.perf_counter()
+    
+    latency = func_end - func_start
+
+    print(f"Latency For Call_Video_LLava: {latency:.6f} seconds")
+    return "TERMINATE"
+
 
 ### ======================================== AUTOGEN GROUP-CHAT INITIALIZATION =========================================================================
 groupchat = autogen.GroupChat(
-    agents=[Decider_Agent, engineer, user_proxy],
+    agents=[engineer, user_proxy],
     messages=[],
     max_round=500,
     speaker_selection_method="round_robin",
@@ -252,4 +292,12 @@ async def main():
 
 
 if __name__ == "__main__":
+   
+   start_time = time.perf_counter()
    asyncio.run(main())
+   end_time = time.perf_counter()
+
+   latency = end_time - start_time
+
+   print(f"Latency For Main: {latency:.6f} seconds")
+    

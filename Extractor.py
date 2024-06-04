@@ -56,7 +56,7 @@ class FrameExtractor:
                 frame_cnt += 1
 
 
-def extract_video_frames(video_file, output_root, sampling):
+def extract_frames(video_file, output_root, sampling=1):
     video_basename = osp.basename(video_file).split('.')[0]
     video_ext = osp.splitext(video_file)[-1]
     if video_ext not in supported_video_ext:
@@ -68,8 +68,10 @@ def extract_video_frames(video_file, output_root, sampling):
             extractor = FrameExtractor(video_file=video_file, output_dir=output_dir, sampling=sampling)
             # Extract frames
             extractor.extract()
+            return output_dir
     else:
         os.remove(video_file)
+        return "Something went wrong! TERMINATE"
 
 
 def extract_frames_from_videos(video=None, dir=None, sampling=-1, output_root='extracted_frames', workers=None):
@@ -95,4 +97,6 @@ def extract_frames_from_videos(video=None, dir=None, sampling=-1, output_root='e
             p.starmap(extract_video_frames, [(v[0], v[1], sampling) for v in video_list])
 
 # Example usage commented out to prevent execution
+if __name__ == "__main__":
+    extract_video_frames("demo_videos/Complex_Video.mp4", "extracted_frames", 1)
 # extract_frames_from_videos(dir="path_to_videos", sampling=2, output_root="extracted_frames_folder", workers=4)
